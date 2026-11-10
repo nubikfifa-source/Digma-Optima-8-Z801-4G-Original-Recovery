@@ -21,7 +21,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y tzdata curl git python3 python3-pip python3-setuptools zip unzip rsync cpio lzma python-is-python3 file sudo
         
-        # Скачиваем официальную автономную утилиту repo напрямую от Google
         sudo curl https://googleapis.com -o /usr/local/bin/repo
         sudo chmod a+x /usr/local/bin/repo
 
@@ -98,7 +97,7 @@ jobs:
     - name: Install Android Build Tools and Fix Old Libraries
       run: |
         export DEBIAN_FRONTEND=noninteractive
-        # Подключаем архивный репозиторий Ubuntu 20.04 ради старых 32-битных библиотек компилятора
+        # Исправлена ссылка на официальный архив безопасности старой Ubuntu
         echo "deb http://ubuntu.com focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
         sudo apt-get update
         sudo apt-get install -y libncurses5 libssl1.1 || true
@@ -109,10 +108,8 @@ jobs:
         mkdir -p twrp_sources
         cd twrp_sources
         
-        # Чистим системный конфиг от ломающих подмен
         echo -e "[user]\n\tname = nubikfifa-source\n\temail = nubikfifa-source@github.com" > ~/.gitconfig
         
-        # Официальная и чистая инициализация репозитория
         repo init --depth=1 -u https://github.com -b twrp-9.0 --no-clone-bundle
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
