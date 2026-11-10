@@ -10,7 +10,7 @@ env:
 
 jobs:
   twrp_build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
@@ -19,7 +19,7 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
-        sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git curl cpio lzma python-is-python3 file sudo
+        sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf zip unzip rsync cpio lzma python3 git curl file sudo
 
     - name: Download Stock Recovery
       run: |
@@ -104,4 +104,3 @@ jobs:
         name: TWRP_Recovery_${{ env.DEVICE_NAME }}
         path: |
           workspace/out/target/product/Z801/recovery.img
-
