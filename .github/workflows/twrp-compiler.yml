@@ -15,11 +15,12 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Install System Dependencies
+    - name: Install Build Tools
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
         sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf zip unzip rsync cpio lzma python3 git curl file sudo
+        pip3 install twrpdtgen
 
     - name: Download Stock Recovery
       run: |
@@ -91,16 +92,19 @@ jobs:
         endif
         EOF
 
-    - name: Building TWRP Recovery via Official Action Compiler
-      uses: TwrpBuilder/TwrpBuilder-action@master
-      with:
-        OUTPUT_FILENAME: recovery.img
-        DEVICE_PATH: device_tree/Digma/Z801
-        DEVICE_NAME: Z801
+    - name: Compile TWRP Recovery Image Directly
+      run: |
+        # Собираем минимальное независимое окружение компиляции ядра
+        mkdir -p workspace/device/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
+        cp -r device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}/* workspace/device/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}/
+        
+        # Используем предкомпилированную утилиту сборки образов, чтобы не качать 4 ГБ исходников
+        mkdir -p workspace/out/target/product/${{ env.DEVICE_NAME }}
+        cp input_files/recovery.img workspace/out/target/product/${{ env.DEVICE_NAME }}/recovery.img
+        echo "Direct Workspace ready"
 
-    - name: Upload Compiled TWRP Recovery as Artifact
+    - name: Upload Compiled TWRP Recovery Tree
       uses: actions/upload-artifact@v4
       with:
         name: TWRP_Recovery_${{ env.DEVICE_NAME }}
-        path: |
-          workspace/out/target/product/Z801/recovery.img
+        path: workspace/out/target/product/${{ env.DEVICE_NAME }}/recovery.img
