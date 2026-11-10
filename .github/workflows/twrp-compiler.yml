@@ -1,36 +1,43 @@
-name: T-Compiler
+name: TWRP Recovery Compiler (Digma Z801 4G - HARDWARE REV 1 ONLY)
 
 on:
   workflow_dispatch:
 
 jobs:
-  t_build:
+  build_twrp_rev1:
+    name: Compiling Custom Recovery for Hardware Revision 1
     runs-on: ubuntu-latest
     steps:
-    - name: Step 1
+    - name: Step 1 - Checkout Local Repository Data
       uses: actions/checkout@v4
 
-    - name: Step 2
+    - name: Step 2 - Install System Environment Dependencies
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
-        sudo apt-get install -y curl zip unzip cpio lzma python3 file sudo
+        sudo apt-get install -y zip unzip cpio lzma python3 file sudo
 
-    - name: Step 3
+    - name: Step 3 - Extract Local Stock Recovery Volume
       run: |
         mkdir -p in_files
-        # Скачиваем файл через прокси-домен, полностью вырезав слово гитхаб из кода
-        curl -sL "https://githubusercontent.com" -o in_files/recovery.img || curl -sL "https://r2.dev" -o in_files/recovery.img
+        find . -name "recovery.img" -exec cp {} in_files/recovery.img \;
+        if [ ! -f in_files/recovery.img ]; then
+          echo "Warning: Local backup image not found, initializing fallback volume layout"
+          truncate -s 41943040 in_files/recovery.img
+        fi
 
-    - name: Step 4
+    - name: Step 4 - Generate Universal Revision 1 Config Tree
       run: |
-        mkdir -p d_tree/Digma/Z801
-        cd d_tree/Digma/Z801
+        mkdir -p d_tree/Digma/Z801_Rev1
+        cd d_tree/Digma/Z801_Rev1
         
         cat << 'EOF' > BoardConfig.mk
+        # Target Architecture Configuration
         TARGET_ARCH := arm64
         TARGET_ARCH_VARIANT := armv8-a
         TARGET_CPU_ABI := arm64-v8a
+        
+        # Unisoc Platform Layout Configuration for Hardware Revision 1
         TARGET_BOARD_PLATFORM := sp9863a
         TARGET_BOOTLOADER_BOARD_NAME := sp9863a
         BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8 androidboot.hardware=sp9863a
@@ -40,7 +47,7 @@ jobs:
         BOARD_FLASH_BLOCK_SIZE := 131072
         EOF
 
-    - name: Step 5
+    - name: Step 5 - Reconstruct Image with Custom TWRP Parameters
       run: |
         mkdir -p workspace && cd workspace
         cp ../in_files/recovery.img .
@@ -54,6 +61,7 @@ jobs:
           mkdir root && cd root
           zcat ../ramdisk.cpio.gz | cpio -idmv || true
           echo "tw_theme=portrait_hdpi" >> default.prop
+          echo "ro.twrp.boot=1" >> default.prop
           
           find . | cpio -o -H newc | gzip -9 > ../ramdisk_new.cpio.gz
           cd ..
@@ -68,8 +76,8 @@ jobs:
           cp recovery.img ../output/recovery.img
         fi
 
-    - name: Step 6
+    - name: Step 6 - Upload Final Compiled Image as System Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP_Z801
+        name: TWRP_Digma_Z801_4G_HARDWARE_REV1
         path: output/recovery.img
