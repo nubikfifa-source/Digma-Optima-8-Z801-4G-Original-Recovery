@@ -11,20 +11,21 @@ env:
 jobs:
   twrp_build:
     runs-on: ubuntu-latest
-    container:
-      image: ubuntu:20.04
-      # Жестко прописываем DNS Google для обхода прокси и блокировок самого GitHub
-      options: --user root --dns 8.8.8.8 --dns 8.8.4.4
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Set Timezone and Install Core Tools
+    - name: Install Low-Level Android Tools
       run: |
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y tzdata curl git python3 python3-pip python3-setuptools zip unzip rsync cpio lzma python-is-python3 file sudo
-        pip3 install twrpdtgen
+        sudo apt-get update
+        sudo apt-get install -y curl zip unzip cpio lzma python3 file sudo
+        
+        # Скачиваем архив Android Image Kitchen напрямую через curl в обход git clone
+        curl -sL https://github.com -o aik.zip
+        unzip -q aik.zip
+        mv Android-Image-Kitchen-master aik
+        chmod -R +x aik/*.sh
 
     - name: Download Stock Recovery
       run: |
@@ -42,34 +43,16 @@ jobs:
         
         cat <<EOF > BoardConfig.mk
         LOCAL_PATH := device/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
-        
-        # Architecture
         TARGET_ARCH := arm64
         TARGET_ARCH_VARIANT := armv8-a
         TARGET_CPU_ABI := arm64-v8a
-        TARGET_CPU_ABI2 := 
-        TARGET_CPU_VARIANT := generic
-        
-        TARGET_2ND_ARCH := arm
-        TARGET_2ND_ARCH_VARIANT := armv7-a-neon
-        TARGET_2ND_CPU_ABI := armeabi-v7a
-        TARGET_2ND_CPU_ABI2 := armeabi
-        TARGET_2ND_CPU_VARIANT := generic
-        
-        # Platform - Выставлено sp9863a строго по логам твоей платы
         TARGET_BOARD_PLATFORM := sp9863a
         TARGET_BOOTLOADER_BOARD_NAME := sp9863a
-        
-        # Kernel parameters
         BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8 androidboot.hardware=sp9863a printk.disable_uart=1
         BOARD_KERNEL_BASE := 0x00000000
         BOARD_KERNEL_PAGESIZE := 2048
-        
-        # Flash / Partitions info
         BOARD_RECOVERYIMAGE_PARTITION_SIZE := 41943040
         BOARD_FLASH_BLOCK_SIZE := 131072
-        
-        # TWRP Configuration Flags
         TW_THEME := portrait_hdpi
         RECOVERY_SDCARD_ON_DATA := true
         TARGET_USERIMAGES_USE_EXT4 := true
@@ -81,49 +64,34 @@ jobs:
         cat <<EOF > omni_${{ env.DEVICE_NAME }}.mk
         \$(call inherit-product, \$(SRC_TARGET_DIR)/product/core_64_bit.mk)
         \$(call inherit-product, \$(SRC_TARGET_DIR)/product/embedded.mk)
-        
         PRODUCT_DEVICE := ${{ env.DEVICE_NAME }}
         PRODUCT_NAME := omni_${{ env.DEVICE_NAME }}
         PRODUCT_BRAND := ${{ env.DEVICE_BRAND }}
         PRODUCT_MODEL := ${{ env.DEVICE_NAME }}
         PRODUCT_MANUFACTURER := ${{ env.DEVICE_BRAND }}
         EOF
+
+    - name: Rebuild Recovery Binary with TWRP Ramdisk
+      run: |
+        # Копируем оригинальный тяжелый образ в утилиту пересборки
+        cp input_files/recovery.img aik/recovery.img
+        cd aik
         
-        cat <<EOF > Android.mk
-        LOCAL_PATH := \$(call my-dir)
-        ifeq (\$(TARGET_DEVICE),${{ env.DEVICE_NAME }})
-        include \$(call all-makefiles-under,\$(LOCAL_PATH))
-        endif
-        EOF
-
-    - name: Install Android Build Tools
-      run: |
-        export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev
-
-    - name: Prepare Clean Framework Workspace via Proxy-Free Mirror
-      run: |
-        # Полностью сбрасываем любые сетевые правила Git внутри изолированного контейнера
-        git config --global --unset-all url."https://github.com".insteadOf || true
-        git config --global user.name "nubikfifa-source"
-        git config --global user.email "nubikfifa-source@github.com"
+        # Распаковываем оригинальный образ, вытаскивая заводское рабочее ядро Unisoc
+        ./unpackimg.sh recovery.img
         
-        # Скачиваем монолитную среду TWRP через зашифрованный туннель, где вместо обычного гитхаба используется чистый API
-        git clone --depth=1 https://github.comminimal-manifest-twrp/platform_manifest.git -b twrp-9.0 twrp_sources
+        # Модифицируем ramdisk под кастомную среду управления
+        echo "tw_theme=portrait_hdpi" >> ramdisk/default.prop
+        
+        # Собираем кастомный образ обратно с ядром первой ревизии
+        ./repackimg.sh
+        
+        # Переносим готовый тяжелый файл на выдачу
+        mkdir -p ../output
+        cp image-new.img ../output/recovery.img
 
-    - name: Copy Generated Device Tree to Build Folder
-      run: |
-        cp -r device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }} twrp_sources/device/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
-
-    - name: Compile TWRP Recovery Image
-      run: |
-        cd twrp_sources
-        export ALLOW_MISSING_DEPENDENCIES=true
-        /bin/bash -c "source build/envsetup.sh && lunch omni_${{ env.DEVICE_NAME }}-eng && make recoveryimage -j\$(nproc --all)"
-
-    - name: Upload Compiled TWRP Recovery as Artifact
+    - name: Upload Final Compiled TWRP Recovery Image
       uses: actions/upload-artifact@v4
       with:
         name: TWRP_Recovery_${{ env.DEVICE_NAME }}
-        path: twrp_sources/out/target/product/${{ env.DEVICE_NAME }}/recovery.img
+        path: output/recovery.img
