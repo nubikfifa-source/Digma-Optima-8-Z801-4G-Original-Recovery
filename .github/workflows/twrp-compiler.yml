@@ -97,10 +97,12 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zip zlib1g-dev
 
-    - name: Prepare Clean Compiled Framework Workspace
+    - name: Prepare Clean Compiled Framework Workspace Without Git
       run: |
-        # Используем полностью автономный и собранный в один архив компилятор TWRP
-        git clone --depth=1 https://github.com -b twrp-9.0 twrp_sources
+        # Скачиваем среду сборки TWRP в виде ZIP-архива напрямую через curl, обходя git ломалки
+        curl -sL https://github.com -o twrp_base.zip
+        unzip -q twrp_base.zip
+        mv platform_manifest-twrp-9.0 twrp_sources
 
     - name: Copy Generated Device Tree to Build Folder
       run: |
