@@ -12,7 +12,7 @@ jobs:
   twrp_build:
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:20.04
+      image: ubuntu:22.04
       options: --user root
     steps:
     - name: Checkout Repository
@@ -32,10 +32,14 @@ jobs:
         mkdir device_tree
         python3 -m twrpdtgen input_files/recovery.img -o device_tree/
 
-    - name: Install Android Build Tools
+    - name: Install Android Build Tools and Fix Old Libraries
       run: |
         export DEBIAN_FRONTEND=noninteractive
-        apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev
+        # Добавляем репозиторий старой Убунту, чтобы выкачать недостающие 32-битные библиотеки для Android
+        echo "deb http://ubuntu.com focal-security main" | tee /etc/apt/sources.list.d/focal-security.list
+        apt-get update
+        apt-get install -y libncurses5 libssl1.1 || true
+        apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev
 
     - name: Install Repo Tool
       run: |
@@ -51,7 +55,8 @@ jobs:
         cd twrp_sources
         git config --global user.name "nubikfifa-source"
         git config --global user.email "nubikfifa-source@github.com"
-        repo init --depth=1 -u https://github.com -b twrp-9.0
+        # Используем современный синтаксис для инициализации репозитория исходников
+        repo init --depth=1 -u https://github.com -b twrp-9.0 --repo-rev=v2.45
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Copy Generated Device Tree to Build Folder
