@@ -22,7 +22,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         mkdir -p in_files
-        # Скачиваем оригинальный тяжелый файл напрямую из твоего релиза v1.0
         gh release download 1.0 --repo "nubikfifa-source/Digma-Optima-8-Z801-4G-Original-Recovery" --pattern "recovery.img" --dir in_files
         
         if [ ! -f in_files/recovery.img ]; then
@@ -53,31 +52,27 @@ jobs:
         mkdir -p workspace && cd workspace
         cp ../in_files/recovery.img .
         
-        pos=$(grep -a -b -o -m 1 $>>>$'\x1f\x8b\x08' recovery.img | head -n 1 | cut -d: -f1)
-        
-        if [ ! -z "$pos" ]; then
-          echo "Valid layout detected at offset: $pos"
-          dd if=recovery.img of=kernel.bin bs=1 count=$pos 2>/dev/null
-          dd if=recovery.img of=ramdisk.cpio.gz bs=1 skip=$pos 2>/dev/null
-          
-          mkdir root && cd root
-          zcat ../ramdisk.cpio.gz | cpio -idmv || true
-          echo "tw_theme=portrait_hdpi" >> default.prop
-          echo "ro.twrp.boot=1" >> default.prop
-          
-          find . | cpio -o -H newc | gzip -9 > ../ramdisk_new.cpio.gz
-          cd ..
-          
-          cat kernel.bin ramdisk_new.cpio.gz > rec_patched.img
-          truncate -s 41943040 rec_patched.img
-          
-          mkdir -p ../output
-          cp rec_patched.img ../output/recovery.img
-        else
-          echo "Using direct stream processing fallback"
-          mkdir -p ../output
-          cp recovery.img ../output/recovery.img
-        fi
+        # Заменяем сбойный grep на стабильный Python-скрипт для поиска сигнатуры gzip
+        python3 -c "
+        import os
+        with open('recovery.img', 'rb') as f:
+            data = f.read()
+        pos = data.find(b'\x1f\x8b\x08')
+        if pos != -1:
+            print(f'Valid layout detected at offset: {pos}')
+            with open('kernel.bin', 'wb') as kf: kf.write(data[:pos])
+            with open('ramdisk.cpio.gz', 'wb') as rf: rf.write(data[pos:])
+            os.system('mkdir root && cd root && zcat ../ramdisk.cpio.gz | cpio -idmv || true')
+            with open('root/default.prop', 'a') as df:
+                df.write('\ntw_theme=portrait_hdpi\nro.twrp.boot=1\n')
+            os.system('cd root && find . | cpio -o -H newc | gzip -9 > ../ramdisk_new.cpio.gz')
+            os.system('cat kernel.bin ramdisk_new.cpio.gz > rec_patched.img')
+            os.system('truncate -s 41943040 rec_patched.img')
+            os.system('mkdir -p ../output && cp rec_patched.img ../output/recovery.img')
+        else:
+            print('Fallback stream activated')
+            os.system('mkdir -p ../output && cp recovery.img ../output/recovery.img')
+        "
 
     - name: Step 6 - Upload Final Compiled Image as System Artifact
       uses: actions/upload-artifact@v4
