@@ -25,14 +25,81 @@ jobs:
         apt-get install -y tzdata curl git python3 python3-pip python3-setuptools zip unzip rsync cpio lzma python-is-python3 file sudo
         pip3 install twrpdtgen
 
-    - name: Generate Device Tree from Stock Recovery
+    - name: Download Stock Recovery
       run: |
         mkdir -p input_files
         curl -sL "${{ env.RECOVERY_URL }}" -o input_files/recovery.img
-        # Выдаем максимальные права на чтение и выполнение для AIK
-        chmod -R 777 input_files
-        mkdir -p device_tree
-        python3 -m twrpdtgen input_files/recovery.img -o device_tree/
+
+    - name: Create Custom Device Tree Manually
+      run: |
+        # Создаем структуру папок дерева вручную, минуя сбойную утилиту
+        mkdir -p device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
+        cd device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
+        
+        # 1. Создаем AndroidProducts.mk
+        cat <<EOF > AndroidProducts.mk
+        PRODUCT_MAKEFILES := \$(LOCAL_DIR)/omni_${{ env.DEVICE_NAME }}.mk
+        EOF
+        
+        # 2. Создаем BoardConfig.mk (Конфигурация железа Unisoc SC9863A)
+        cat <<EOF > BoardConfig.mk
+        LOCAL_PATH := device/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
+        
+        # Architecture
+        TARGET_ARCH := arm64
+        TARGET_ARCH_VARIANT := armv8-a
+        TARGET_CPU_ABI := arm64-v8a
+        TARGET_CPU_ABI2 := 
+        TARGET_CPU_VARIANT := generic
+        
+        TARGET_2ND_ARCH := arm
+        TARGET_2ND_ARCH_VARIANT := armv7-a-neon
+        TARGET_2ND_CPU_ABI := armeabi-v7a
+        TARGET_2ND_CPU_ABI2 := armeabi
+        TARGET_2ND_CPU_VARIANT := generic
+        
+        # Platform
+        TARGET_BOARD_PLATFORM := sc9863a
+        TARGET_BOOTLOADER_BOARD_NAME := sc9863a
+        
+        # Kernel parameters
+        BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8 androidboot.hardware=sc9863a printk.disable_uart=1
+        BOARD_KERNEL_BASE := 0x00000000
+        BOARD_KERNEL_PAGESIZE := 2048
+        
+        # Flash / Partitions info
+        BOARD_RECOVERYIMAGE_PARTITION_SIZE := 41943040
+        BOARD_FLASH_BLOCK_SIZE := 131072
+        
+        # TWRP Configuration Flags
+        TW_THEME := portrait_hdpi
+        RECOVERY_SDCARD_ON_DATA := true
+        TARGET_USERIMAGES_USE_EXT4 := true
+        TW_EXCLUDE_DEFAULT_USB_INIT := true
+        TW_INCLUDE_CRYPTO := false
+        ALLOW_MISSING_DEPENDENCIES := true
+        EOF
+        
+        # 3. Создаем omni_Z801.mk
+        cat <<EOF > omni_${{ env.DEVICE_NAME }}.mk
+        \$(call inherit-product, \$(SRC_TARGET_DIR)/product/core_64_bit.mk)
+        \$(call inherit-product, \$(SRC_TARGET_DIR)/product/embedded.mk)
+        \$(call inherit-product, device/minimal-twrp/src/min-twrp.mk)
+        
+        PRODUCT_DEVICE := ${{ env.DEVICE_NAME }}
+        PRODUCT_NAME := omni_${{ env.DEVICE_NAME }}
+        PRODUCT_BRAND := ${{ env.DEVICE_BRAND }}
+        PRODUCT_MODEL := ${{ env.DEVICE_NAME }}
+        PRODUCT_MANUFACTURER := ${{ env.DEVICE_BRAND }}
+        EOF
+        
+        # 4. Создаем Android.mk
+        cat <<EOF > Android.mk
+        LOCAL_PATH := \$(call my-dir)
+        ifeq (\$(TARGET_DEVICE),${{ env.DEVICE_NAME }})
+        include \$(call all-makefiles-under,\$(LOCAL_PATH))
+        endif
+        EOF
 
     - name: Install Android Build Tools
       run: |
