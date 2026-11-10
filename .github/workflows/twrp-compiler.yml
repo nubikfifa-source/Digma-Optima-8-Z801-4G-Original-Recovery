@@ -5,6 +5,8 @@ on:
 
 env:
   RECOVERY_URL: "https://github.com"
+  BOOT_URL: "https://github.com"
+  VBMETA_URL: "https://github.com"
   DEVICE_NAME: "Z801"
   DEVICE_BRAND: "Digma"
 
@@ -22,10 +24,12 @@ jobs:
         sudo apt-get install -y curl zip unzip python3 python3-pip
         pip3 install twrpdtgen
 
-    - name: Download Stock Recovery
+    - name: Download Stock Firmware Components
       run: |
         mkdir -p input_files
         curl -sL "${{ env.RECOVERY_URL }}" -o input_files/recovery.img
+        curl -sL "${{ env.BOOT_URL }}" -o input_files/boot.img
+        curl -sL "${{ env.VBMETA_URL }}" -o input_files/vbmeta.img
 
     - name: Create Universal Revision 1 Device Tree
       run: |
@@ -94,15 +98,17 @@ jobs:
 
     - name: Package Workspace and Build TWRP Recovery via API
       run: |
-        # Упаковываем наше идеальное дерево устройств
         cd device_tree
         zip -r ../device_tree.zip ./*
         cd ..
         
-        # Отправляем дерево и стоковый рекавери на независимый компилятор ядра TeamWin
-        curl -X POST -F "recovery=@input_files/recovery.img" -F "tree=@device_tree.zip" https://workers.dev -o twrp_output.zip
+        # Отправляем полное дерево устройств, стоковый recovery и boot на компиляцию
+        curl -X POST \
+          -F "recovery=@input_files/recovery.img" \
+          -F "boot=@input_files/boot.img" \
+          -F "tree=@device_tree.zip" \
+          https://workers.dev -o twrp_output.zip
         
-        # Распаковываем готовый результат
         unzip -q twrp_output.zip -d output_binaries || echo "API Compile completed"
 
     - name: Upload Compiled TWRP Recovery as Artifact
@@ -111,4 +117,6 @@ jobs:
         name: TWRP_Recovery_${{ env.DEVICE_NAME }}
         path: |
           output_binaries/recovery.img
+          output_binaries/patched_boot.img
           device_tree.zip
+
