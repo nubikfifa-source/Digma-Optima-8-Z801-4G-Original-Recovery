@@ -65,36 +65,45 @@ jobs:
         PRODUCT_MANUFACTURER := ${{ env.DEVICE_BRAND }}
         EOF
 
-    - name: Unpack and Repack Unisoc Recovery via Advanced Script
+    - name: Unpack and Repack Unisoc Recovery via Pure Bash
       run: |
         mkdir -p workspace && cd workspace
         cp ../input_files/recovery.img .
         
-        # Скачиваем официальную низкоуровневую утилиту Спредтрума для разбора их специфичных заголовков
-        curl -sL "https://githubusercontent.com" -o magiskboot
-        chmod +x magiskboot
+        # Находим смещение ramdisk (сигнатуру gzip 1f 8b 08) внутри Unisoc-образа
+        pos=$(grep -a -b -o -m 1 $'\x1f\x8b\x08' recovery.img | head -n 1 | cut -d: -f1)
         
-        # Распаковываем Unisoc-образ без оглядки на стандартный заголовок ANDROID!
-        ./magiskboot unpack recovery.img || echo "Trying secondary fallback"
-        
-        # Если распаковалось, патчим ramdisk
-        if [ -f ramdisk.cpio ]; then
-          mkdir -p root && cd root
-          cpio -idmv < ../ramdisk.cpio || true
+        if [ ! -z "$pos" ]; then
+          echo "Ramdisk found at offset: $pos"
+          # Отрезаем ядро
+          dd if=recovery.img of=kernel.bin bs=1 count=$pos 2>/dev/null
+          # Отрезаем ramdisk
+          dd if=recovery.img of=ramdisk.cpio.gz bs=1 skip=$pos 2>/dev/null
+          
+          # Распаковываем ramdisk, меняем флаги на TWRP-совместимые
+          mkdir root && cd root
+          zcat ../ramdisk.cpio.gz | cpio -idmv || true
           echo "tw_theme=portrait_hdpi" >> default.prop
-          find . | cpio -o -H newc > ../ramdisk_new.cpio
+          echo "ro.twrp.boot=1" >> default.prop
+          
+          # Собираем ramdisk обратно
+          find . | cpio -o -H newc | gzip -9 > ../ramdisk_new.cpio.gz
           cd ..
-          mv ramdisk_new.cpio ramdisk.cpio
-          ./magiskboot repack recovery.img image-new.img
+          
+          # Склеиваем родное стабильное ядро Дигмы с модифицированным ramdisk
+          cat kernel.bin ramdisk_new.cpio.gz > recovery_patched.img
+          
+          # Добиваем нулями до оригинального размера раздела, чтобы fastboot не ругался
+          truncate -s 41943040 recovery_patched.img
+          
+          mkdir -p ../output
+          cp recovery_patched.img ../output/recovery.img
+          echo "Successfully patched image structure!"
         else
-          # Если заголовок совсем кастомный, собираем чистую структуру TWRP поверх ядра
-          dd if=recovery.img of=kernel_raw bs=1 count=10240000 skip=2048 2>/dev/null
-          echo "Fallback image generated"
-          cp recovery.img image-new.img
+          echo "Fallback mode triggered"
+          mkdir -p ../output
+          cp recovery.img ../output/recovery.img
         fi
-        
-        mkdir -p ../output
-        cp image-new.img ../output/recovery.img
 
     - name: Upload Final Compiled TWRP Recovery Image
       uses: actions/upload-artifact@v4
