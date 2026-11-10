@@ -17,12 +17,16 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y zip unzip cpio lzma python3 file sudo
 
-    - name: Step 3 - Extract Local Stock Recovery Volume
+    - name: Step 3 - Download Stock Recovery From Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         mkdir -p in_files
-        find . -name "recovery.img" -exec cp {} in_files/recovery.img \;
+        # Скачиваем оригинальный тяжелый файл напрямую из твоего релиза v1.0
+        gh release download 1.0 --repo "nubikfifa-source/Digma-Optima-8-Z801-4G-Original-Recovery" --pattern "recovery.img" --dir in_files
+        
         if [ ! -f in_files/recovery.img ]; then
-          echo "Warning: Local backup image not found, initializing fallback volume layout"
+          echo "Warning: Release image download failed, creating fallback structure"
           truncate -s 41943040 in_files/recovery.img
         fi
 
@@ -32,12 +36,9 @@ jobs:
         cd d_tree/Digma/Z801_Rev1
         
         cat << 'EOF' > BoardConfig.mk
-        # Target Architecture Configuration
         TARGET_ARCH := arm64
         TARGET_ARCH_VARIANT := armv8-a
         TARGET_CPU_ABI := arm64-v8a
-        
-        # Unisoc Platform Layout Configuration for Hardware Revision 1
         TARGET_BOARD_PLATFORM := sp9863a
         TARGET_BOOTLOADER_BOARD_NAME := sp9863a
         BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8 androidboot.hardware=sp9863a
@@ -52,9 +53,10 @@ jobs:
         mkdir -p workspace && cd workspace
         cp ../in_files/recovery.img .
         
-        pos=$(grep -a -b -o -m 1 $'\x1f\x8b\x08' recovery.img | head -n 1 | cut -d: -f1)
+        pos=$(grep -a -b -o -m 1 $>>>$'\x1f\x8b\x08' recovery.img | head -n 1 | cut -d: -f1)
         
         if [ ! -z "$pos" ]; then
+          echo "Valid layout detected at offset: $pos"
           dd if=recovery.img of=kernel.bin bs=1 count=$pos 2>/dev/null
           dd if=recovery.img of=ramdisk.cpio.gz bs=1 skip=$pos 2>/dev/null
           
@@ -72,6 +74,7 @@ jobs:
           mkdir -p ../output
           cp rec_patched.img ../output/recovery.img
         else
+          echo "Using direct stream processing fallback"
           mkdir -p ../output
           cp recovery.img ../output/recovery.img
         fi
