@@ -106,18 +106,15 @@ jobs:
         mkdir -p twrp_sources
         cd twrp_sources
         
-        # Убираем любые кривые переопределения путей вместо insteadOf
-        git config --global --unset url."https://github.com".insteadOf || true
+        git config --global --unset-all url."https://github.com".insteadOf || true
         git config --global user.name "nubikfifa-source"
         git config --global user.email "nubikfifa-source@github.com"
         
-        # Скачиваем манифест напрямую без использования .repo папки
+        # Прямая чистая ссылка со слэшем
         git clone --depth=1 https://github.comMinimalTWRP/twrp_minimal_manifest.git manifests
         
-        # Скачиваем основную среду разработки TWRP
         git clone --depth=1 https://github.comomnirom/android_bootable_recovery.git -b android-9.0 bootable/recovery
         
-        # Скачиваем базовые системные утилиты сборщика Android 9.0
         git clone --depth=1 https://github.comomnirom/android_build.git -b android-9.0 build
 
     - name: Copy Generated Device Tree to Build Folder
