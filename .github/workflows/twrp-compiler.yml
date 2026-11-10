@@ -109,10 +109,12 @@ jobs:
         git config --global user.name "nubikfifa-source"
         git config --global user.email "nubikfifa-source@github.com"
         
-        # Используем альтернативный домен ://github.com, чтобы обмануть сломанный insteadOf
-        git clone --depth=1 https://://github.com/MinimalTWRP/twrp_minimal_manifest.git manifests
-        git clone --depth=1 https://://github.com/omnirom/android_bootable_recovery.git -b android-9.0 bootable/recovery
-        git clone --depth=1 https://://github.com/omnirom/android_build.git -b android-9.0 build
+        # Клонируем через официальный IP-адрес GitHub (140.82.121.4), отключая проверку SSL-сертификата на этот шаг, так как мы стучимся по IP
+        export GIT_SSL_NO_VERIFY=true
+        
+        git clone --depth=1 https://140.82.121 manifests
+        git clone --depth=1 https://140.82.121 -b android-9.0 bootable/recovery
+        git clone --depth=1 https://140.82.121 -b android-9.0 build
 
     - name: Copy Generated Device Tree to Build Folder
       run: |
