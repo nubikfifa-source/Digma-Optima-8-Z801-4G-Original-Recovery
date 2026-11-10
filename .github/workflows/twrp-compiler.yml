@@ -103,19 +103,23 @@ jobs:
 
     - name: Prepare Official TWRP Source Environment
       run: |
-        mkdir twrp_sources
+        mkdir -p twrp_sources
         cd twrp_sources
+        
+        # Настраиваем Git внутри контейнера, чтобы он не сбрасывал пути
         git config --global user.name "nubikfifa-source"
         git config --global user.email "nubikfifa-source@github.com"
+        git config --global url."https://github.com".insteadOf git://://github.com
         
-        # Используем официальный и 100% живой манифест от создателей TWRP
-        git clone --depth=1 https://github.com -b twrp-9.0 .repo/manifests
-        mkdir -p .repo/manifests.git
-        cp .repo/manifests/default.xml .repo/manifest.xml
+        # Качаем утилиту repo напрямую в рабочую папку
+        curl https://googleapis.com > ./repo
+        chmod a+x ./repo
         
-        curl https://googleapis.com > ./repo_local
-        chmod a+x ./repo_local
-        ./repo_local sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags || true
+        # Чистая инициализация манифеста через родную команду repo
+        ./repo init --depth=1 -u https://github.comMinimalTWRP/twrp_minimal_manifest.git -b twrp-9.0 --no-clone-bundle
+        
+        # Запускаем синхронизацию
+        ./repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Copy Generated Device Tree to Build Folder
       run: |
@@ -132,3 +136,5 @@ jobs:
       with:
         name: TWRP_Recovery_${{ env.DEVICE_NAME }}
         path: twrp_sources/out/target/product/${{ env.DEVICE_NAME }}/recovery.img
+        
+       
