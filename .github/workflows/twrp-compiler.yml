@@ -32,16 +32,13 @@ jobs:
 
     - name: Create Custom Device Tree Manually
       run: |
-        # Создаем структуру папок дерева вручную, минуя сбойную утилиту
         mkdir -p device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
         cd device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
         
-        # 1. Создаем AndroidProducts.mk
         cat <<EOF > AndroidProducts.mk
         PRODUCT_MAKEFILES := \$(LOCAL_DIR)/omni_${{ env.DEVICE_NAME }}.mk
         EOF
         
-        # 2. Создаем BoardConfig.mk (Конфигурация железа Unisoc SC9863A)
         cat <<EOF > BoardConfig.mk
         LOCAL_PATH := device/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
         
@@ -80,11 +77,9 @@ jobs:
         ALLOW_MISSING_DEPENDENCIES := true
         EOF
         
-        # 3. Создаем omni_Z801.mk
         cat <<EOF > omni_${{ env.DEVICE_NAME }}.mk
         \$(call inherit-product, \$(SRC_TARGET_DIR)/product/core_64_bit.mk)
         \$(call inherit-product, \$(SRC_TARGET_DIR)/product/embedded.mk)
-        \$(call inherit-product, device/minimal-twrp/src/min-twrp.mk)
         
         PRODUCT_DEVICE := ${{ env.DEVICE_NAME }}
         PRODUCT_NAME := omni_${{ env.DEVICE_NAME }}
@@ -93,7 +88,6 @@ jobs:
         PRODUCT_MANUFACTURER := ${{ env.DEVICE_BRAND }}
         EOF
         
-        # 4. Создаем Android.mk
         cat <<EOF > Android.mk
         LOCAL_PATH := \$(call my-dir)
         ifeq (\$(TARGET_DEVICE),${{ env.DEVICE_NAME }})
@@ -107,12 +101,14 @@ jobs:
         apt-get update
         apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev
 
-    - name: Prepare Omni ROM Source Environment Without Repo Tool
+    - name: Prepare Official TWRP Source Environment
       run: |
         mkdir twrp_sources
         cd twrp_sources
         git config --global user.name "nubikfifa-source"
         git config --global user.email "nubikfifa-source@github.com"
+        
+        # Используем официальный и 100% живой манифест от создателей TWRP
         git clone --depth=1 https://github.com -b twrp-9.0 .repo/manifests
         mkdir -p .repo/manifests.git
         cp .repo/manifests/default.xml .repo/manifest.xml
