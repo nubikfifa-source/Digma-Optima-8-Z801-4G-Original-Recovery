@@ -5,14 +5,12 @@ on:
 
 env:
   RECOVERY_URL: "https://github.com"
-  BOOT_URL: "https://github.com"
-  VBMETA_URL: "https://github.com"
   DEVICE_NAME: "Z801"
   DEVICE_BRAND: "Digma"
 
 jobs:
   twrp_build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
@@ -21,17 +19,14 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
-        sudo apt-get install -y curl zip unzip python3 python3-pip
-        pip3 install twrpdtgen
+        sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 git curl cpio lzma python-is-python3 file sudo
 
-    - name: Download Stock Firmware Components
+    - name: Download Stock Recovery
       run: |
         mkdir -p input_files
         curl -sL "${{ env.RECOVERY_URL }}" -o input_files/recovery.img
-        curl -sL "${{ env.BOOT_URL }}" -o input_files/boot.img
-        curl -sL "${{ env.VBMETA_URL }}" -o input_files/vbmeta.img
 
-    - name: Create Universal Revision 1 Device Tree
+    - name: Create Custom Device Tree Manually
       run: |
         mkdir -p device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
         cd device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
@@ -96,27 +91,17 @@ jobs:
         endif
         EOF
 
-    - name: Package Workspace and Build TWRP Recovery via API
-      run: |
-        cd device_tree
-        zip -r ../device_tree.zip ./*
-        cd ..
-        
-        # Отправляем полное дерево устройств, стоковый recovery и boot на компиляцию
-        curl -X POST \
-          -F "recovery=@input_files/recovery.img" \
-          -F "boot=@input_files/boot.img" \
-          -F "tree=@device_tree.zip" \
-          https://workers.dev -o twrp_output.zip
-        
-        unzip -q twrp_output.zip -d output_binaries || echo "API Compile completed"
+    - name: Building TWRP Recovery via Official Action Compiler
+      uses: TwrpBuilder/TwrpBuilder-action@master
+      with:
+        OUTPUT_FILENAME: recovery.img
+        DEVICE_PATH: device_tree/Digma/Z801
+        DEVICE_NAME: Z801
 
     - name: Upload Compiled TWRP Recovery as Artifact
       uses: actions/upload-artifact@v4
       with:
         name: TWRP_Recovery_${{ env.DEVICE_NAME }}
         path: |
-          output_binaries/recovery.img
-          output_binaries/patched_boot.img
-          device_tree.zip
+          workspace/out/target/product/Z801/recovery.img
 
