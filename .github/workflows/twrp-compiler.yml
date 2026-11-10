@@ -101,21 +101,19 @@ jobs:
         apt-get update
         apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev
 
-    - name: Prepare Official TWRP Source Environment
+    - name: Prepare Official TWRP Source Environment Without Repo
       run: |
         mkdir -p twrp_sources
         cd twrp_sources
-        
         git config --global user.name "nubikfifa-source"
         git config --global user.email "nubikfifa-source@github.com"
-        git config --global url."https://github.com".insteadOf git://://github.com
         
-        # Качаем СТРОГО чистый текстовый скрипт repo из официального зеркала Android Git
-        curl -sL "https://googlesource.com" | base64 --decode > ./repo
-        chmod a+x ./repo
+        # Клонируем исходники напрямую через git вместо утилиты repo
+        git clone --depth=1 https://github.com -b twrp-9.0 .repo/manifests
+        cp .repo/manifests/default.xml .repo/manifest.xml
         
-        ./repo init --depth=1 -u https://github.comMinimalTWRP/twrp_minimal_manifest.git -b twrp-9.0 --no-clone-bundle
-        ./repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+        # Скачиваем только структуру сборщика компилятора TeamWin
+        git clone --depth=1 https://github.com -b android-9.0 bootable/recovery
 
     - name: Copy Generated Device Tree to Build Folder
       run: |
@@ -125,7 +123,7 @@ jobs:
       run: |
         cd twrp_sources
         export ALLOW_MISSING_DEPENDENCIES=true
-        /bin/bash -c "source build/envsetup.sh && lunch omni_${{ env.DEVICE_NAME }}-eng && make recoveryimage -j$(nproc --all)"
+        /bin/bash -c "source build/envsetup.sh && lunch omni_${{ env.DEVICE_NAME }}-eng && make recoveryimage -j\$(nproc --all)"
 
     - name: Upload Compiled TWRP Recovery as Artifact
       uses: actions/upload-artifact@v4
