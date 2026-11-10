@@ -15,17 +15,11 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Install Low-Level Android Tools
+    - name: Install System Dependencies
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
         sudo apt-get install -y curl zip unzip cpio lzma python3 file sudo
-        
-        # Скачиваем архив Android Image Kitchen напрямую через curl в обход git clone
-        curl -sL https://github.com -o aik.zip
-        unzip -q aik.zip
-        mv Android-Image-Kitchen-master aik
-        chmod -R +x aik/*.sh
 
     - name: Download Stock Recovery
       run: |
@@ -71,24 +65,70 @@ jobs:
         PRODUCT_MANUFACTURER := ${{ env.DEVICE_BRAND }}
         EOF
 
-    - name: Rebuild Recovery Binary with TWRP Ramdisk
+    - name: Unpack and Repack Recovery via Internal Python Script
       run: |
-        # Копируем оригинальный тяжелый образ в утилиту пересборки
-        cp input_files/recovery.img aik/recovery.img
-        cd aik
+        mkdir -p workspace && cd workspace
+        cp ../input_files/recovery.img .
         
-        # Распаковываем оригинальный образ, вытаскивая заводское рабочее ядро Unisoc
-        ./unpackimg.sh recovery.img
+        # Создаем встроенный распаковщик образов Android на чистом Python
+        cat << 'EOF' > unpack.py
+        import os, struct
+        with open('recovery.img', 'rb') as f:
+            header = f.read(2048)
+            magic = header[0:8]
+            if magic != b'ANDROID!':
+                print('Error: Not a valid Android boot image header!')
+                exit(1)
+            kernel_size, kernel_addr, ramdisk_size, ramdisk_addr = struct.unpack('<IIII', header[8:24])
+            page_size = struct.unpack('<I', header[36:40])[0]
+            
+            f.seek(page_size)
+            kernel_data = f.read(kernel_size)
+            ramdisk_data = f.read(ramdisk_size)
+            
+            with open('kernel', 'wb') as kf: kf.write(kernel_data)
+            with open('ramdisk.cpio.gz', 'wb') as rf: rf.write(ramdisk_data)
+            print(f'Successfully unpacked layout! Kernel size: {kernel_size}, Ramdisk size: {ramdisk_size}')
+        EOF
         
-        # Модифицируем ramdisk под кастомную среду управления
-        echo "tw_theme=portrait_hdpi" >> ramdisk/default.prop
+        # Запускаем распаковку
+        python3 unpack.py
         
-        # Собираем кастомный образ обратно с ядром первой ревизии
-        ./repackimg.sh
+        # Модифицируем ramdisk
+        mkdir -p root
+        cd root
+        zcat ../ramdisk.cpio.gz | cpio -idmv || true
+        echo "tw_theme=portrait_hdpi" >> default.prop
+        find . | cpio -o -H newc | gzip > ../ramdisk_new.cpio.gz
+        cd ..
         
-        # Переносим готовый тяжелый файл на выдачу
+        # Собираем образ обратно на чистом Python, используя родное заводское ядро
+        cat << 'EOF' > repack.py
+        import os, struct
+        kernel_size = os.path.getsize('kernel')
+        ramdisk_size = os.path.getsize('ramdisk_new.cpio.gz')
+        page_size = 2048
+        
+        with open('recovery_new.img', 'wb') as f:
+            # Сборка стандартного Android Boot Header
+            header = bytearray(page_size)
+            header[0:8] = b'ANDROID!'
+            struct.pack_into('<IIII', header, 8, kernel_size, 0x00000000, ramdisk_size, 0x00000000)
+            struct.pack_into('<I', header, 36, page_size)
+            f.write(header)
+            
+            with open('kernel', 'rb') as kf: f.write(kf.read())
+            # Выравнивание по страницам
+            f.write(b'\x00' * (page_size - (kernel_size % page_size)))
+            
+            with open('ramdisk_new.cpio.gz', 'rb') as rf: f.write(rf.read())
+            f.write(b'\x00' * (page_size - (ramdisk_size % page_size)))
+        print('Successfully repacked final image structure!')
+        EOF
+        
+        python3 repack.py
         mkdir -p ../output
-        cp image-new.img ../output/recovery.img
+        cp recovery_new.img ../output/recovery.img
 
     - name: Upload Final Compiled TWRP Recovery Image
       uses: actions/upload-artifact@v4
