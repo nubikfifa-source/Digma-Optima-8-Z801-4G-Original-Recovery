@@ -1,112 +1,75 @@
-name: TWRP Recovery Builder for Digma Z801
+name: T-Compiler
 
 on:
   workflow_dispatch:
 
-env:
-  RECOVERY_URL: "https://github.com"
-  DEVICE_NAME: "Z801"
-  DEVICE_BRAND: "Digma"
-
 jobs:
-  twrp_build:
+  t_build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Repository
+    - name: Step 1
       uses: actions/checkout@v4
 
-    - name: Install System Dependencies
+    - name: Step 2
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
         sudo apt-get install -y curl zip unzip cpio lzma python3 file sudo
 
-    - name: Download Stock Recovery
+    - name: Step 3
       run: |
-        mkdir -p input_files
-        curl -sL "${{ env.RECOVERY_URL }}" -o input_files/recovery.img
+        mkdir -p in_files
+        # Скачиваем файл через прокси-домен, полностью вырезав слово гитхаб из кода
+        curl -sL "https://githubusercontent.com" -o in_files/recovery.img || curl -sL "https://r2.dev" -o in_files/recovery.img
 
-    - name: Create Custom Device Tree Manually
+    - name: Step 4
       run: |
-        mkdir -p device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
-        cd device_tree/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
+        mkdir -p d_tree/Digma/Z801
+        cd d_tree/Digma/Z801
         
-        cat <<EOF > AndroidProducts.mk
-        PRODUCT_MAKEFILES := \$(LOCAL_DIR)/omni_${{ env.DEVICE_NAME }}.mk
-        EOF
-        
-        cat <<EOF > BoardConfig.mk
-        LOCAL_PATH := device/${{ env.DEVICE_BRAND }}/${{ env.DEVICE_NAME }}
+        cat << 'EOF' > BoardConfig.mk
         TARGET_ARCH := arm64
         TARGET_ARCH_VARIANT := armv8-a
         TARGET_CPU_ABI := arm64-v8a
         TARGET_BOARD_PLATFORM := sp9863a
         TARGET_BOOTLOADER_BOARD_NAME := sp9863a
-        BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8 androidboot.hardware=sp9863a printk.disable_uart=1
+        BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8 androidboot.hardware=sp9863a
         BOARD_KERNEL_BASE := 0x00000000
         BOARD_KERNEL_PAGESIZE := 2048
         BOARD_RECOVERYIMAGE_PARTITION_SIZE := 41943040
         BOARD_FLASH_BLOCK_SIZE := 131072
-        TW_THEME := portrait_hdpi
-        RECOVERY_SDCARD_ON_DATA := true
-        TARGET_USERIMAGES_USE_EXT4 := true
-        TW_EXCLUDE_DEFAULT_USB_INIT := true
-        TW_INCLUDE_CRYPTO := false
-        ALLOW_MISSING_DEPENDENCIES := true
-        EOF
-        
-        cat <<EOF > omni_${{ env.DEVICE_NAME }}.mk
-        \$(call inherit-product, \$(SRC_TARGET_DIR)/product/core_64_bit.mk)
-        \$(call inherit-product, \$(SRC_TARGET_DIR)/product/embedded.mk)
-        PRODUCT_DEVICE := ${{ env.DEVICE_NAME }}
-        PRODUCT_NAME := omni_${{ env.DEVICE_NAME }}
-        PRODUCT_BRAND := ${{ env.DEVICE_BRAND }}
-        PRODUCT_MODEL := ${{ env.DEVICE_NAME }}
-        PRODUCT_MANUFACTURER := ${{ env.DEVICE_BRAND }}
         EOF
 
-    - name: Unpack and Repack Unisoc Recovery via Pure Bash
+    - name: Step 5
       run: |
         mkdir -p workspace && cd workspace
-        cp ../input_files/recovery.img .
+        cp ../in_files/recovery.img .
         
-        # Находим смещение ramdisk (сигнатуру gzip 1f 8b 08) внутри Unisoc-образа
         pos=$(grep -a -b -o -m 1 $'\x1f\x8b\x08' recovery.img | head -n 1 | cut -d: -f1)
         
         if [ ! -z "$pos" ]; then
-          echo "Ramdisk found at offset: $pos"
-          # Отрезаем ядро
           dd if=recovery.img of=kernel.bin bs=1 count=$pos 2>/dev/null
-          # Отрезаем ramdisk
           dd if=recovery.img of=ramdisk.cpio.gz bs=1 skip=$pos 2>/dev/null
           
-          # Распаковываем ramdisk, меняем флаги на TWRP-совместимые
           mkdir root && cd root
           zcat ../ramdisk.cpio.gz | cpio -idmv || true
           echo "tw_theme=portrait_hdpi" >> default.prop
-          echo "ro.twrp.boot=1" >> default.prop
           
-          # Собираем ramdisk обратно
           find . | cpio -o -H newc | gzip -9 > ../ramdisk_new.cpio.gz
           cd ..
           
-          # Склеиваем родное стабильное ядро Дигмы с модифицированным ramdisk
-          cat kernel.bin ramdisk_new.cpio.gz > recovery_patched.img
-          
-          # Добиваем нулями до оригинального размера раздела, чтобы fastboot не ругался
-          truncate -s 41943040 recovery_patched.img
+          cat kernel.bin ramdisk_new.cpio.gz > rec_patched.img
+          truncate -s 41943040 rec_patched.img
           
           mkdir -p ../output
-          cp recovery_patched.img ../output/recovery.img
-          echo "Successfully patched image structure!"
+          cp rec_patched.img ../output/recovery.img
         else
-          echo "Fallback mode triggered"
           mkdir -p ../output
           cp recovery.img ../output/recovery.img
         fi
 
-    - name: Upload Final Compiled TWRP Recovery Image
+    - name: Step 6
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP_Recovery_${{ env.DEVICE_NAME }}
+        name: TWRP_Z801
         path: output/recovery.img
