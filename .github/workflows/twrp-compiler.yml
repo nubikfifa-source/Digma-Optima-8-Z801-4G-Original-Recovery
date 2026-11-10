@@ -106,16 +106,13 @@ jobs:
         mkdir -p twrp_sources
         cd twrp_sources
         
-        git config --global --unset-all url."https://github.com".insteadOf || true
         git config --global user.name "nubikfifa-source"
         git config --global user.email "nubikfifa-source@github.com"
         
-        # Прямая чистая ссылка со слэшем
-        git clone --depth=1 https://github.comMinimalTWRP/twrp_minimal_manifest.git manifests
-        
-        git clone --depth=1 https://github.comomnirom/android_bootable_recovery.git -b android-9.0 bootable/recovery
-        
-        git clone --depth=1 https://github.comomnirom/android_build.git -b android-9.0 build
+        # Используем альтернативный домен ://github.com, чтобы обмануть сломанный insteadOf
+        git clone --depth=1 https://://github.com/MinimalTWRP/twrp_minimal_manifest.git manifests
+        git clone --depth=1 https://://github.com/omnirom/android_bootable_recovery.git -b android-9.0 bootable/recovery
+        git clone --depth=1 https://://github.com/omnirom/android_build.git -b android-9.0 build
 
     - name: Copy Generated Device Tree to Build Folder
       run: |
