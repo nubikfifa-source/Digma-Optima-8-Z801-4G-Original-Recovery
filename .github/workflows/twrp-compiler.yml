@@ -10,10 +10,7 @@ env:
 
 jobs:
   twrp_build:
-    runs-on: ubuntu-latest
-    container:
-      image: ubuntu:20.04
-      options: --user root
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
@@ -21,9 +18,12 @@ jobs:
     - name: Set Timezone and Install Core Tools
       run: |
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y tzdata curl git python3 python3-pip python3-setuptools zip unzip rsync cpio lzma python-is-python3 file sudo
-        pip3 install twrpdtgen
+        sudo apt-get update
+        sudo apt-get install -y tzdata curl git python3 python3-pip python3-setuptools zip unzip rsync cpio lzma python-is-python3 file sudo
+        
+        # Скачиваем официальную автономную утилиту repo напрямую от Google
+        sudo curl https://googleapis.com -o /usr/local/bin/repo
+        sudo chmod a+x /usr/local/bin/repo
 
     - name: Download Stock Recovery
       run: |
@@ -95,28 +95,26 @@ jobs:
         endif
         EOF
 
-    - name: Install Android Build Tools
+    - name: Install Android Build Tools and Fix Old Libraries
       run: |
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update
-        apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev
+        # Подключаем архивный репозиторий Ubuntu 20.04 ради старых 32-битных библиотек компилятора
+        echo "deb http://ubuntu.com focal-security main" | sudo tee /etc/apt/sources.list.d/focal-security.list
+        sudo apt-get update
+        sudo apt-get install -y libncurses5 libssl1.1 || true
+        sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib gnupg gperf lib32readline-dev lib32z1-dev liblz4-tool libncurses5-dev libssl-dev libxml2 libxml2-utils lzop pngcrush schedtool squashfs-tools xsltproc zlib1g-dev
 
-    - name: Prepare Official TWRP Source Environment Without Repo
+    - name: Prepare Official TWRP Source Environment via Repo
       run: |
         mkdir -p twrp_sources
         cd twrp_sources
         
-        # Радикальный фикс: полностью затираем глобальный конфиг Git чистыми данными
+        # Чистим системный конфиг от ломающих подмен
         echo -e "[user]\n\tname = nubikfifa-source\n\temail = nubikfifa-source@github.com" > ~/.gitconfig
         
-        # Скачиваем структуру напрямую без использования утилиты repo
-        git clone --depth=1 https://github.com manifests
-        cp manifests/default.xml .
-        mkdir -p bootable
-        
-        # Скачиваем среду сборки TWRP и базовые скрипты компилятора Android 9.0
-        git clone --depth=1 https://github.com -b android-9.0 bootable/recovery
-        git clone --depth=1 https://github.com -b android-9.0 build
+        # Официальная и чистая инициализация репозитория
+        repo init --depth=1 -u https://github.com -b twrp-9.0 --no-clone-bundle
+        repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
     - name: Copy Generated Device Tree to Build Folder
       run: |
@@ -126,7 +124,7 @@ jobs:
       run: |
         cd twrp_sources
         export ALLOW_MISSING_DEPENDENCIES=true
-        /bin/bash -c "source build/envsetup.sh && lunch omni_${{ env.DEVICE_NAME }}-eng && make recoveryimage -j\$(nproc --all)"
+        /bin/bash -c "source build/envsetup.sh && lunch omni_${{ env.DEVICE_NAME }}-eng && make recoveryimage -j$(nproc --all)"
 
     - name: Upload Compiled TWRP Recovery as Artifact
       uses: actions/upload-artifact@v4
