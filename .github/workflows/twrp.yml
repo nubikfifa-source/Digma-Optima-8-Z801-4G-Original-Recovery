@@ -73,7 +73,8 @@ jobs:
           BOARD_CFG=~/twrp/device/$VENDOR/$DEVICE/BoardConfig.mk
           cat << 'EOF' >> "$BOARD_CFG"
 
-          # Size optimization for TS8227L Head Unit
+          # Size optimization & AVB fix for TS8227L Head Unit
+          BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3221225472
           BOARD_RAMDISK_USE_LZMA := true
           TW_EXTRA_LANGUAGES := false
           TW_EXCLUDE_DEFAULT_USB_INIT := true
