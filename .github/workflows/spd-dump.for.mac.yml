@@ -5,27 +5,41 @@ on:
 
 jobs:
   build_macos_tool:
-    name: Compile spd_dump on Intel macOS
-    runs-on: macos-13
+    name: Compile spd_dump for Intel macOS (x86_64)
+    runs-on: macos-latest
     steps:
-      - name: 1. Install libusb via Homebrew
+      - name: 1. Download Intel libusb and headers
         run: |
-          brew install libusb
+          mkdir -p work && cd work
+          # Качаем готовый пакет libusb строго под архитектуру Intel (x86_64) для macOS Monterey
+          brew fetch --bottle-tag=x86_64_monterey libusb
+          tar -xzf $(brew --cache --bottle-tag=x86_64_monterey libusb)
+          mv libusb/* libusb_intel
 
-      - name: 2. Clone and Compile spd_dump
+      - name: 2. Clone and Compile spd_dump for Intel (x86_64)
         run: |
+          cd work
           REPO_URL=$(printf "https://%s/%s/%s.git" "github.com" "TomKing062" "spd_dump")
-          echo "Cloning from: $REPO_URL"
           git clone "$REPO_URL" spd_dump
           cd spd_dump
-          make CFLAGS="-O2 -I$(brew --prefix libusb)/include/libusb-1.0" LDFLAGS="-L$(brew --prefix libusb)/lib -lusb-1.0"
-          cp $(brew --prefix libusb)/lib/libusb-1.0.0.dylib .
-          install_name_tool -change $(brew --prefix libusb)/lib/libusb-1.0.0.dylib @executable_path/libusb-1.0.0.dylib spd_dump
+          
+          INC_DIR="$(pwd)/../libusb_intel/include/libusb-1.0"
+          LIB_DIR="$(pwd)/../libusb_intel/lib"
+          
+          # Собираем бинарник принудительно под архитектуру Intel (-arch x86_64)
+          clang -arch x86_64 -O2 -I"$INC_DIR" *.c -L"$LIB_DIR" -lusb-1.0 -o spd_dump
+          
+          cp "$LIB_DIR/libusb-1.0.0.dylib" .
+          install_name_tool -change "@@HOMEBREW_PREFIX@@/opt/libusb/lib/libusb-1.0.0.dylib" "@executable_path/libusb-1.0.0.dylib" spd_dump || true
+          install_name_tool -change "/usr/local/opt/libusb/lib/libusb-1.0.0.dylib" "@executable_path/libusb-1.0.0.dylib" spd_dump || true
+          
+          file spd_dump
+          otool -L spd_dump
 
       - name: 3. Upload Ready Binary
         uses: actions/upload-artifact@v4
         with:
-          name: spd_dump_macOS_Intel
+          name: spd_dump_macOS_Intel_x86_64
           path: |
-            spd_dump/spd_dump
-            spd_dump/libusb-1.0.0.dylib
+            work/spd_dump/spd_dump
+            work/spd_dump/libusb-1.0.0.dylib
