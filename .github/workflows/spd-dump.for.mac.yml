@@ -16,24 +16,23 @@ jobs:
           tar -xjf libusb.tar.bz2
           cd libusb-1.0.27
           
-          # Собираем статическую библиотеку под Intel (x86_64) с поддержкой старых macOS
           CFLAGS="-arch x86_64 -mmacosx-version-min=10.15 -O2" \
           LDFLAGS="-arch x86_64 -mmacosx-version-min=10.15" \
           ./configure --host=x86_64-apple-darwin --prefix="$(pwd)/../libusb_intel" --enable-static --disable-shared
           make -j$(sysctl -n hw.ncpu)
           make install
 
-      - name: 2. Clone and Compile Standalone spd_dump (x86_64)
+      - name: 2. Download and Compile Standalone spd_dump (x86_64)
         run: |
           cd work
-          REPO_URL=$(printf "https://%s/%s/%s.git" "github.com" "TomKing062" "spd_dump")
-          git clone "$REPO_URL" spd_dump
-          cd spd_dump
+          ZIP_URL=$(printf "https://%s/%s/%s/archive/refs/heads/main.zip" "github.com" "ilyakurdyukov" "spreadtrum_flash")
+          curl -sL "$ZIP_URL" -o spd_dump.zip
+          unzip -q spd_dump.zip
+          cd spreadtrum_flash-main
           
           INC_DIR="$(pwd)/../libusb_intel/include/libusb-1.0"
           LIB_FILE="$(pwd)/../libusb_intel/lib/libusb-1.0.a"
           
-          # Компилируем единый автономный файл под Intel x86_64 с системными фреймворками USB
           clang -arch x86_64 -mmacosx-version-min=10.15 -O2 -I"$INC_DIR" *.c "$LIB_FILE" -framework IOKit -framework CoreFoundation -framework Security -o spd_dump
           
           file spd_dump
@@ -43,4 +42,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: spd_dump_macOS_Intel_x86_64
-          path: work/spd_dump/spd_dump
+          path: work/spreadtrum_flash-main/spd_dump
+
