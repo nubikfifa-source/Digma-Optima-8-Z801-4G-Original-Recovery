@@ -6,7 +6,7 @@ on:
 jobs:
   build_twrp:
     name: Compile TWRP from Source via twrpdtgen
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
@@ -86,9 +86,11 @@ jobs:
           source build/envsetup.sh
           lunch omni_${DEVICE}-eng
           mka recoveryimage -j$(nproc --all)
+          mkdir -p $GITHUB_WORKSPACE/out_twrp
+          cp out/target/product/${DEVICE}/recovery.img $GITHUB_WORKSPACE/out_twrp/recovery.img
 
       - name: 9. Upload Compiled TWRP Artifact
         uses: actions/upload-artifact@v4
         with:
           name: TWRP_Real_Digma_Z801_4G_Rev1
-          path: ~/twrp/out/target/product/${{ env.DEVICE }}/recovery.img
+          path: out_twrp/recovery.img
