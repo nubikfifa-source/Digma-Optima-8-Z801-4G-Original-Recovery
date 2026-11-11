@@ -21,6 +21,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3-pip cpio lzma xz-utils repo
           pip3 install twrpdtgen
+          mkdir -p ~/bin
+          cp /usr/bin/repo ~/bin/repo
+          chmod a+x ~/bin/repo
 
       - name: 4. Fetch Stock recovery.img
         env:
@@ -50,8 +53,12 @@ jobs:
           git config --global user.name "Builder"
           git config --global user.email "builder@github.com"
           git config --global color.ui false
-          repo init --depth=1 --no-repo-verify -u https://github.com -b twrp-10.0
-          repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+          ORG="minimal-manifest-twrp"
+          REPO_NAME="platform_manifest_twrp_omni.git"
+          MANIFEST_URL="https://github.com{ORG}/${REPO_NAME}"
+          echo "Manifest URL: $MANIFEST_URL"
+          ~/bin/repo init --depth=1 --no-repo-verify -u "$MANIFEST_URL" -b twrp-10.0
+          ~/bin/repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
       - name: 7. Copy Device Tree & Apply LZMA Compression
         run: |
