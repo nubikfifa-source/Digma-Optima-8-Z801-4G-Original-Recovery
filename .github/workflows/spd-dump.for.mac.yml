@@ -5,18 +5,25 @@ on:
 
 jobs:
   build_macos_tool:
-    name: Compile spd_dump for Intel macOS (x86_64)
+    name: Compile Portable spd_dump for Intel macOS (x86_64)
     runs-on: macos-latest
     steps:
-      - name: 1. Download Intel libusb and headers
+      - name: 1. Build Static Intel libusb from Source
         run: |
           mkdir -p work && cd work
-          # Качаем готовый пакет libusb строго под архитектуру Intel (x86_64) для macOS Monterey
-          brew fetch --bottle-tag=x86_64_monterey libusb
-          tar -xzf $(brew --cache --bottle-tag=x86_64_monterey libusb)
-          mv libusb/* libusb_intel
+          LIBUSB_URL=$(printf "https://%s/%s/%s/releases/download/v1.0.27/libusb-1.0.27.tar.bz2" "github.com" "libusb" "libusb")
+          curl -sL "$LIBUSB_URL" -o libusb.tar.bz2
+          tar -xjf libusb.tar.bz2
+          cd libusb-1.0.27
+          
+          # Собираем статическую библиотеку под Intel (x86_64) с поддержкой старых macOS
+          CFLAGS="-arch x86_64 -mmacosx-version-min=10.15 -O2" \
+          LDFLAGS="-arch x86_64 -mmacosx-version-min=10.15" \
+          ./configure --host=x86_64-apple-darwin --prefix="$(pwd)/../libusb_intel" --enable-static --disable-shared
+          make -j$(sysctl -n hw.ncpu)
+          make install
 
-      - name: 2. Clone and Compile spd_dump for Intel (x86_64)
+      - name: 2. Clone and Compile Standalone spd_dump (x86_64)
         run: |
           cd work
           REPO_URL=$(printf "https://%s/%s/%s.git" "github.com" "TomKing062" "spd_dump")
@@ -24,14 +31,10 @@ jobs:
           cd spd_dump
           
           INC_DIR="$(pwd)/../libusb_intel/include/libusb-1.0"
-          LIB_DIR="$(pwd)/../libusb_intel/lib"
+          LIB_FILE="$(pwd)/../libusb_intel/lib/libusb-1.0.a"
           
-          # Собираем бинарник принудительно под архитектуру Intel (-arch x86_64)
-          clang -arch x86_64 -O2 -I"$INC_DIR" *.c -L"$LIB_DIR" -lusb-1.0 -o spd_dump
-          
-          cp "$LIB_DIR/libusb-1.0.0.dylib" .
-          install_name_tool -change "@@HOMEBREW_PREFIX@@/opt/libusb/lib/libusb-1.0.0.dylib" "@executable_path/libusb-1.0.0.dylib" spd_dump || true
-          install_name_tool -change "/usr/local/opt/libusb/lib/libusb-1.0.0.dylib" "@executable_path/libusb-1.0.0.dylib" spd_dump || true
+          # Компилируем единый автономный файл под Intel x86_64 с системными фреймворками USB
+          clang -arch x86_64 -mmacosx-version-min=10.15 -O2 -I"$INC_DIR" *.c "$LIB_FILE" -framework IOKit -framework CoreFoundation -framework Security -o spd_dump
           
           file spd_dump
           otool -L spd_dump
@@ -40,6 +43,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: spd_dump_macOS_Intel_x86_64
-          path: |
-            work/spd_dump/spd_dump
-            work/spd_dump/libusb-1.0.0.dylib
+          path: work/spd_dump/spd_dump
