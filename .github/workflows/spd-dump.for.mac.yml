@@ -1,12 +1,12 @@
-name: Build spd_dump for macOS
+name: Build spd_dump for Intel macOS
 
 on:
   workflow_dispatch:
 
 jobs:
   build_macos_tool:
-    name: Compile spd_dump on macOS
-    runs-on: macos-latest
+    name: Compile spd_dump on Intel macOS
+    runs-on: macos-13
     steps:
       - name: 1. Install libusb via Homebrew
         run: |
@@ -14,17 +14,18 @@ jobs:
 
       - name: 2. Clone and Compile spd_dump
         run: |
-          git clone https://github.com
+          REPO_URL=$(printf "https://%s/%s/%s.git" "github.com" "TomKing062" "spd_dump")
+          echo "Cloning from: $REPO_URL"
+          git clone "$REPO_URL" spd_dump
           cd spd_dump
           make CFLAGS="-O2 -I$(brew --prefix libusb)/include/libusb-1.0" LDFLAGS="-L$(brew --prefix libusb)/lib -lusb-1.0"
-          # Копируем библиотеку libusb рядом, чтобы утилита работала на любом Mac без brew
           cp $(brew --prefix libusb)/lib/libusb-1.0.0.dylib .
           install_name_tool -change $(brew --prefix libusb)/lib/libusb-1.0.0.dylib @executable_path/libusb-1.0.0.dylib spd_dump
 
       - name: 3. Upload Ready Binary
         uses: actions/upload-artifact@v4
         with:
-          name: spd_dump_macOS_portable
+          name: spd_dump_macOS_Intel
           path: |
             spd_dump/spd_dump
             spd_dump/libusb-1.0.0.dylib
