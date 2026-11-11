@@ -48,14 +48,12 @@ jobs:
           ls -la ~/device_tree/*/*
 
       - name: 6. Initialize Minimal TWRP 10.0 Manifest
-        env:
-          MANIFEST_REPO: minimal-manifest-twrp/platform_manifest_twrp_omni.git
         run: |
           mkdir -p ~/twrp && cd ~/twrp
           git config --global user.name "Builder"
           git config --global user.email "builder@github.com"
           git config --global color.ui false
-          ~/bin/repo init --depth=1 --no-repo-verify -u "https://github.com{MANIFEST_REPO}" -b twrp-10.0
+          ~/bin/repo init --depth=1 --no-repo-verify -u https://github.com -b twrp-10.0
           ~/bin/repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
       - name: 7. Copy Device Tree & Apply LZMA Compression
