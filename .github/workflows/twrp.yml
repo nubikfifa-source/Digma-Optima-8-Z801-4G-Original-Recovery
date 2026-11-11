@@ -22,7 +22,11 @@ jobs:
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3-pip cpio lzma xz-utils
           pip3 install twrpdtgen
           mkdir -p ~/bin
-          curl -fL https://githubusercontent.com -o ~/bin/repo
+          for i in 1 2 3; do
+            git clone --depth=1 https://github.com ~/git-repo-tmp && break || sleep 5
+          done
+          cp ~/git-repo-tmp/repo ~/bin/repo
+          rm -rf ~/git-repo-tmp
           chmod a+x ~/bin/repo
           echo "$HOME/bin" >> $GITHUB_PATH
 
@@ -95,4 +99,3 @@ jobs:
         with:
           name: TWRP_Real_Digma_Z801_4G_Rev1
           path: out_twrp/recovery.img
-
