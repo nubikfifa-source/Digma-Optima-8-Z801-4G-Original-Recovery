@@ -1,11 +1,11 @@
-name: Build Real TWRP Recovery (Digma Z801 4G - Rev 1)
+name: Build Real TWRP Recovery (TS8227L Head Unit)
 
 on:
   workflow_dispatch:
 
 jobs:
   build_twrp:
-    name: Compile TWRP from Source via twrpdtgen
+    name: Compile TWRP from Source for TS8227L
     runs-on: ubuntu-22.04
     steps:
       - name: 1. Checkout Repository
@@ -22,11 +22,7 @@ jobs:
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3-pip cpio lzma xz-utils
           pip3 install twrpdtgen
           mkdir -p ~/bin
-          for i in 1 2 3; do
-            git clone --depth=1 https://github.com ~/git-repo-tmp && break || sleep 5
-          done
-          cp ~/git-repo-tmp/repo ~/bin/repo
-          rm -rf ~/git-repo-tmp
+          curl -sL https://googleapis.com -o ~/bin/repo
           chmod a+x ~/bin/repo
           echo "$HOME/bin" >> $GITHUB_PATH
 
@@ -58,7 +54,7 @@ jobs:
           git config --global user.name "Builder"
           git config --global user.email "builder@github.com"
           git config --global color.ui false
-          ~/bin/repo init --depth=1 --no-repo-verify --repo-url=https://github.com --repo-rev=main -u https://github.com -b twrp-10.0
+          ~/bin/repo init --depth=1 --no-repo-verify -u https://github.com -b twrp-10.0
           ~/bin/repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
       - name: 7. Copy Device Tree & Apply LZMA Compression
@@ -71,14 +67,11 @@ jobs:
           BOARD_CFG=~/twrp/device/$VENDOR/$DEVICE/BoardConfig.mk
           cat << 'EOF' >> "$BOARD_CFG"
 
-          # Size optimization for Digma Z801 4G (Unisoc SC9863A)
+          # Size optimization for TS8227L Head Unit
           BOARD_RAMDISK_USE_LZMA := true
           TW_EXTRA_LANGUAGES := false
           TW_EXCLUDE_DEFAULT_USB_INIT := true
           TW_NO_SCREEN_BLANK := true
-          TW_BRIGHTNESS_PATH := "/sys/class/backlight/sprd_backlight/brightness"
-          TW_MAX_BRIGHTNESS := 255
-          TW_DEFAULT_BRIGHTNESS := 120
           EOF
 
           echo "VENDOR=$VENDOR" >> $GITHUB_ENV
@@ -97,5 +90,6 @@ jobs:
       - name: 9. Upload Compiled TWRP Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TWRP_Real_Digma_Z801_4G_Rev1
+          name: TWRP_Real_TS8227L
           path: out_twrp/recovery.img
+
