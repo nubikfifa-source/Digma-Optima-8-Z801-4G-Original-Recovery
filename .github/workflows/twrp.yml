@@ -64,7 +64,7 @@ jobs:
           
           ~/bin/repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
-      - name: 7. Copy Device Tree, Fix DTB Flag & Apply LZMA Compression
+      - name: 7. Copy Device Tree, Fix Header Version Conflict & Apply LZMA
         run: |
           VENDOR=$(ls ~/device_tree | head -n 1)
           DEVICE=$(ls ~/device_tree/$VENDOR | head -n 1)
@@ -77,20 +77,16 @@ jobs:
           python3 -c '
           import os, re
           cfg_path = os.path.expanduser("'"$BOARD_CFG"'")
-          dtb_rel = "device/'"$VENDOR"'/'"$DEVICE"'/prebuilt/dtb.img"
           with open(cfg_path, "r") as f:
               lines = f.readlines()
           new_lines = []
           for line in lines:
               if "BOARD_INCLUDE_DTB_IN_BOOTIMG" in line or "BOARD_PREBUILT_DTBIMAGE_DIR" in line:
                   continue
-              line = line.replace("--dtb ", "--dt ")
+              line = re.sub(r"--dtb?\s+\S+", "", line)
               new_lines.append(line)
-          content = "".join(new_lines)
-          if os.path.exists(os.path.expanduser("~/twrp/" + dtb_rel)) and "--dt " not in content:
-              content += f"\nBOARD_MKBOOTIMG_ARGS += --dt {dtb_rel}\n"
           with open(cfg_path, "w") as f:
-              f.write(content)
+              f.writelines(new_lines)
           '
 
           cat << 'EOF' >> "$BOARD_CFG"
