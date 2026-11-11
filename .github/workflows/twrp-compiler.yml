@@ -15,18 +15,22 @@ jobs:
       run: |
         export DEBIAN_FRONTEND=noninteractive
         sudo apt-get update
-        sudo apt-get install -y zip unzip cpio lzma python3 file sudo
+        sudo apt-get install -y zip unzip cpio lzma xz-utils python3 file sudo abootimg
 
     - name: Step 3 - Download Stock Recovery From Release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         mkdir -p in_files
-        gh release download 1.0 --repo "nubikfifa-source/Digma-Optima-8-Z801-4G-Original-Recovery" --pattern "recovery.img" --dir in_files
+        gh release download 1.0 --repo "nubikfifa-source/Digma-Optima-8-Z801-4G-Original-Recovery" --pattern "recovery.img" --dir in_files || true
         
         if [ ! -f in_files/recovery.img ]; then
-          echo "Warning: Release image download failed, creating fallback structure"
-          truncate -s 41943040 in_files/recovery.img
+          if [ -f recovery.img ]; then
+            cp recovery.img in_files/recovery.img
+          else
+            echo "ERROR: recovery.img not found in release 1.0 or repository root!"
+            exit 1
+          fi
         fi
 
     - name: Step 4 - Generate Universal Revision 1 Config Tree
@@ -43,8 +47,11 @@ jobs:
         BOARD_KERNEL_CMDLINE := console=ttyS1,115200n8 androidboot.hardware=sp9863a
         BOARD_KERNEL_BASE := 0x00000000
         BOARD_KERNEL_PAGESIZE := 2048
-        BOARD_RECOVERYIMAGE_PARTITION_SIZE := 41943040
+        BOARD_RECOVERYIMAGE_PARTITION_SIZE := 36700160
         BOARD_FLASH_BLOCK_SIZE := 131072
+        BOARD_RAMDISK_USE_LZMA := true
+        TW_EXTRA_LANGUAGES := false
+        TW_EXCLUDE_DEFAULT_USB_INIT := true
         EOF
 
     - name: Step 5 - Reconstruct Image with Custom TWRP Parameters
@@ -52,9 +59,8 @@ jobs:
         mkdir -p workspace && cd workspace
         cp ../in_files/recovery.img .
         
-        # Заменяем сбойный grep на стабильный Python-скрипт для поиска сигнатуры gzip
         python3 -c "
-        import os
+        import os, struct
         with open('recovery.img', 'rb') as f:
             data = f.read()
         pos = data.find(b'\x1f\x8b\x08')
@@ -66,8 +72,11 @@ jobs:
             with open('root/default.prop', 'a') as df:
                 df.write('\ntw_theme=portrait_hdpi\nro.twrp.boot=1\n')
             os.system('cd root && find . | cpio -o -H newc | gzip -9 > ../ramdisk_new.cpio.gz')
+            new_ramdisk_size = os.path.getsize('ramdisk_new.cpio.gz')
+            with open('kernel.bin', 'r+b') as kf:
+                kf.seek(16)
+                kf.write(struct.pack('<I', new_ramdisk_size))
             os.system('cat kernel.bin ramdisk_new.cpio.gz > rec_patched.img')
-            os.system('truncate -s 41943040 rec_patched.img')
             os.system('mkdir -p ../output && cp rec_patched.img ../output/recovery.img')
         else:
             print('Fallback stream activated')
