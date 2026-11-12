@@ -1,4 +1,4 @@
-name: Build Real TWRP Recovery (TS8227L Head Unit)
+name: Build Real TWRP Recovery (TS8227L)
 
 on:
   workflow_dispatch:
